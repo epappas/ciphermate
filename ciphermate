@@ -1,0 +1,182 @@
+#!/usr/bin/env node
+
+/******************************************
+ * The MIT License (MIT)
+ * 
+ * Copyright (c) 2015 Evangelos Pappas
+ * 
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * 
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ * 
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+/******************************************/
+
+//======================================================================================
+// Initilizations
+//======================================================================================
+var crypto = require('crypto');
+var args = Array.prototype.slice.call(process.argv, 2);
+var modes = ['encrypt', 'decrypt', 'base64', 'hash'];
+var bindings = {};
+var defaults = {
+    algorithm: 'aes256',
+    mode: 'encrypt',
+}
+
+//======================================================================================
+// Basic chackes
+//======================================================================================
+if (args.length === 0) {
+    exitWithFailure();
+}
+
+//======================================================================================
+// Manual print mode
+//======================================================================================
+if (args[0] === '-h') {
+    printHelp();
+    return exitWithSuccess();
+}
+
+//======================================================================================
+// Main assignments
+//======================================================================================
+var interactiveMode = false;
+
+// Set Mode
+//======================================================================================
+var mode = bindings['mode'] || (function () {
+    var m = this.shift();
+
+    if (!~modes.indexOf(m)) return exitWithFailure(m, "is not recognized as mode");
+
+    return m;
+}).call(args);
+
+// Set the Cipher Algorithm
+//======================================================================================
+var algorithm = bindings['algorithm'] || (function () {
+    var p = this[0];
+
+    if (p === '-a') {
+        if (checkCipherAlgorithm(this[1])) {
+            this.shift();
+            return this.shift();
+        }
+        else {
+            return exitWithFailure(this[1], "is not recognized as cipher algorithm");
+        }
+    }
+
+    return defaults['algorithm'];
+}).call(args);
+
+// Set the Cipher Key
+//======================================================================================
+var key = bindings['key'] || (function () {
+    var p = this[0];
+
+    if (p === '-k') {
+        this.shift();
+        return this.shift();
+    }
+
+    return '';
+}).call(args);
+
+// Set the Cipher IV
+//======================================================================================
+var iv = bindings['iv'] || (function () {
+    var p = this[0];
+
+    if (p === '-iv') {
+        this.shift();
+        return this.shift();
+    }
+
+    return '';
+}).call(args);
+
+// Set the Cipher Text
+//======================================================================================
+var cipherText = bindings['cipherText'] || (function () {
+    var text = this.shift();
+
+    if (!text) return exitWithFailure("No CipherText was given");
+
+    return text;
+}).call(args);
+
+//======================================================================================
+// Main Flow
+//======================================================================================
+switch (mode) {
+    case 'encrypt':
+        var injections = [algorithm, key];
+        if (iv) injections.push(iv);
+        var cipher = crypto.createCipher.apply(crypto, injections);
+
+        console.log(cipher.update(cipherText, 'utf8', 'hex') + cipher.final('hex'));
+        break;
+    case 'decrypt':
+        var injections = [algorithm, key];
+        if (iv) injections.push(iv);
+
+        var decipher = crypto.createDecipher.apply(crypto, injections);
+        console.log(decipher.update(cipherText, 'hex', 'utf8') + decipher.final('utf8'));
+
+        break;
+    case 'base64':
+        console.log(new Buffer(cipherText).toString('base64'));
+        break;
+    case 'hash':
+        console.log(crypto.createHash(algorithm).update(cipherText).digest('hex'));
+        break;
+}
+
+//======================================================================================
+// Helpers
+//======================================================================================
+function checkCipherAlgorithm(algorithm) { return !!~crypto.getCiphers().indexOf(algorithm) || !!~crypto.getHashes().indexOf(algorithm); }
+
+function exitWithSuccess(message) {
+    if (arguments.length > 0) console.log.apply(console, ["Info: "].concat(Array.prototype.slice.call(arguments)));
+
+    process.exit(0);
+}
+
+function exitWithFailure() {
+    if (arguments.length > 0) console.log.apply(console, ["Error: "].concat(Array.prototype.slice.call(arguments)));
+
+    printHelp();
+    process.exit(1);
+}
+
+function printHelp() {
+    console.log('ciphermate <encrypt/decrypt/base64/hash> [-a <CipherAlgorithm>] [-k <Key>] [-iv <IV>] [-i] <CipherText>');
+    console.log('ciphermate; a utility to encrypt/decrypt a cipher text');
+    console.log('usage:');
+    console.log('\t-h                       prints this text');
+    // console.log('\t-i                       Interactive Mode');
+    console.log('\t-a       <algorithm>     Specify the Cipher Set Algorithm to use (default aes256)');
+    console.log('\t-k       <key>           Sets the key to be used for the encryption');
+    console.log('\t-iv      <IV>            Sets the IV parameter if needed');
+    console.log('\tencrypt                  Triggers Encryption flow');
+    console.log('\tdecrypt                  Triggers Decryption flow');
+    console.log('\tbase64                   Triggers base64 flow');
+    console.log('\thash                     Triggers hash flow');
+    console.log('\tCipherText               Sets the text to be encrypted/decrypted/hashed encoded');
+}
